@@ -222,7 +222,7 @@ export class Player {
     a.play();
     // fade everything else, including finished one-shots that are clamped (paused) on their last frame
     for (const [k, other] of Object.entries(this.actions)) {
-      if (k !== name && other.enabled && other.getEffectiveWeight() > 0) other.fadeOut(fade);
+      if (k !== name && other.isScheduled() && other.getEffectiveWeight() > 0) other.fadeOut(fade);
     }
     a.fadeIn(fade);
   }
