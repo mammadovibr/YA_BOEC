@@ -170,6 +170,7 @@ function onProg(key) {
     $('#load-text').textContent = `Загрузка зала… ${(p * 100).toFixed(0)}%`;
   };
 }
+$('#load-text').textContent = 'Загрузка зала… 0%';
 const load = (url, key) => new Promise((res, rej) => loader.load(url, res, onProg(key), rej));
 
 let world, player, particles, shock;
@@ -196,6 +197,7 @@ async function init() {
   // warm up shaders so the first punch does not stutter
   renderer.compile(scene, camera);
   $('#load-text').textContent = 'Готово!';
+  window.__gameStarted = true;
   show('menu');
   setTimeout(() => {
     if (innerHeight > innerWidth && /Android|iPhone/i.test(navigator.userAgent)) $('#rotate-hint').classList.remove('hidden');

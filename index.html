@@ -21,6 +21,22 @@
   <link href="https://fonts.googleapis.com/css2?family=Russo+One&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
   <link rel="modulepreload" href="vendor/three/three.module.min.js">
+  <script>
+    // show problems on screen instead of a silent 0% (phones have no console)
+    (function () {
+      function report(msg) {
+        var el = document.getElementById('load-text');
+        if (el && !window.__gameStarted) el.textContent = 'Ошибка: ' + msg;
+      }
+      window.addEventListener('error', function (e) { report(e.message || (e.target && e.target.src) || 'не удалось загрузить файл'); }, true);
+      window.addEventListener('unhandledrejection', function (e) { report(e.reason && e.reason.message || String(e.reason)); });
+      if (!(window.HTMLScriptElement && HTMLScriptElement.supports && HTMLScriptElement.supports('importmap'))) {
+        window.addEventListener('DOMContentLoaded', function () {
+          report('браузер слишком старый. Обнови iOS/Chrome или открой в другом браузере.');
+        });
+      }
+    })();
+  </script>
   <script type="importmap">
     { "imports": { "three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/addons/" } }
   </script>
@@ -33,7 +49,7 @@
   <section id="loading" class="screen">
     <div class="logo"><span>Я</span> БОЕЦ</div>
     <div class="bar"><i id="load-bar"></i></div>
-    <p id="load-text">Загрузка зала… 0%</p>
+    <p id="load-text">Загрузка движка…</p>
   </section>
 
   <!-- main menu -->

@@ -1,5 +1,5 @@
 // Offline cache: the whole game is static, so cache-first with a versioned cache.
-const VERSION = 'yaboec-v2';
+const VERSION = 'yaboec-v3';
 const CORE = [
   './', 'index.html', 'css/style.css', 'manifest.webmanifest',
   'js/main.js', 'js/audio.js', 'js/input.js', 'js/world.js', 'js/player.js', 'js/fx.js', 'js/game.js',
