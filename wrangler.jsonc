@@ -1,0 +1,9 @@
+// Cloudflare deployment: the game is plain static files served from the repo root.
+{
+  "name": "ya-boec",
+  "compatibility_date": "2025-06-01",
+  "assets": {
+    "directory": "./",
+    "not_found_handling": "single-page-application"
+  }
+}
