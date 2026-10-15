@@ -1,5 +1,5 @@
 // Offline cache: the whole game is static, so cache-first with a versioned cache.
-const VERSION = 'yaboec-v1';
+const VERSION = 'yaboec-v2';
 const CORE = [
   './', 'index.html', 'css/style.css', 'manifest.webmanifest',
   'js/main.js', 'js/audio.js', 'js/input.js', 'js/world.js', 'js/player.js', 'js/fx.js', 'js/game.js',
@@ -23,15 +23,24 @@ self.addEventListener('activate', (e) => {
     .then(() => self.clients.claim()));
 });
 
+// Code and pages: network first (updates show up right away), cache as offline fallback.
+// Heavy assets (models, three.js): cache first.
+const isCode = (url) => /\.(html|js|css|webmanifest)$/.test(url.pathname) || url.pathname.endsWith('/');
+
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
-  e.respondWith(
-    caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || fetch(e.request).then((res) => {
-      if (res.ok && (new URL(e.request.url).origin === location.origin || e.request.url.includes('fonts.g'))) {
-        const copy = res.clone();
-        caches.open(VERSION).then((c) => c.put(e.request, copy));
-      }
-      return res;
-    }).catch(() => hit)),
-  );
+  const url = new URL(e.request.url);
+  const sameOrigin = url.origin === location.origin;
+  const put = (res) => {
+    if (res.ok && (sameOrigin || url.hostname.startsWith('fonts.g'))) {
+      const copy = res.clone();
+      caches.open(VERSION).then((c) => c.put(e.request, copy));
+    }
+    return res;
+  };
+  if (sameOrigin && isCode(url) && !url.pathname.includes('/vendor/')) {
+    e.respondWith(fetch(e.request).then(put).catch(() => caches.match(e.request, { ignoreSearch: true })));
+    return;
+  }
+  e.respondWith(caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || fetch(e.request).then(put)));
 });

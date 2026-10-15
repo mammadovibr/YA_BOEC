@@ -2,6 +2,8 @@ import * as THREE from 'three';
 
 const ATTACKS = ['box_01', 'box_02', 'box_03', 'kick'];
 const IN_PLACE = ['walk', 'run', 'dance', 'flip', 'idle'];
+// Some clips have long idle lead-ins/tails: play only the interesting part [start, end] (seconds).
+const TRIM = { greet: [3.3, 7.2] };
 const LIMBS = { lh: 'LeftHand', rh: 'RightHand', lf: 'LeftFoot', rf: 'RightFoot' };
 
 const _a = new THREE.Vector3();
@@ -206,6 +208,7 @@ export class Player {
     if (ATTACKS.includes(name) && ctx) this.assist = this._assistFor(name, ctx.bags);
     const fade = ATTACKS.includes(name) ? 0.12 : 0.22;
     this._play(name, fade);
+    if (TRIM[name]) this.actions[name].time = TRIM[name][0];
     if (name === 'flip') { this.actions.flip.timeScale = 0.95; this.prevRoot = [0, 0]; }
     if (name === 'jump') this.prevRoot = null;
     this.events.push({ type: 'start', name });
@@ -221,6 +224,16 @@ export class Player {
       if (k !== name && other.isRunning() && other.getEffectiveWeight() > 0) other.fadeOut(fade);
     }
     a.fadeIn(fade);
+  }
+
+  // Abort the current one-shot (used when the intro cuts the wave short).
+  cancelAction() {
+    if (this.state !== 'action') return;
+    const from = this.current;
+    this.state = 'loco';
+    this.current = null;
+    this.queued = null;
+    this._toLoco(0.45, from);
   }
 
   stopDance(silent) {
@@ -355,6 +368,10 @@ export class Player {
         p.z += -ddx * s + ddz * c;
       }
       this.prevRoot = r;
+    }
+
+    if (this.state === 'action' && TRIM[this.current] && this.actions[this.current].time >= TRIM[this.current][1]) {
+      this._onFinished(this.actions[this.current]);
     }
 
     world.resolve(p, 0.32);

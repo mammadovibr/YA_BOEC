@@ -223,15 +223,16 @@ def ring_canvas(S=1024):
 
 
 def apron(S=1024):
-    im = Image.new("RGB", (S, 128), (15, 15, 18))
-    d = ImageDraw.Draw(im)
+    # the phrase is drawn twice across a wide canvas and scaled down, so it tiles seamlessly
     f = ImageFont.truetype(FONT_COND, 80)
     txt = "Я БОЕЦ  ★  BOXING CLUB  ★  "
-    x = 10
-    while x < S:
-        d.text((x, 18), txt, font=f, fill=(230, 40, 40) if (x // 10) % 2 == 0 else (255, 255, 255))
-        x += d.textlength(txt, font=f)
-    save(np.asarray(im, np.float32), "apron.jpg")
+    tw = int(ImageDraw.Draw(Image.new("RGB", (1, 1))).textlength(txt, font=f))
+    im = Image.new("RGB", (tw * 2, 128), (15, 15, 18))
+    d = ImageDraw.Draw(im)
+    for k in range(2):
+        d.text((k * tw, 18), "Я БОЕЦ", font=f, fill=(230, 40, 40))
+        d.text((k * tw + d.textlength("Я БОЕЦ  ", font=f), 18), "★  BOXING CLUB  ★", font=f, fill=(255, 255, 255))
+    save(np.asarray(im.resize((S, 128), Image.LANCZOS), np.float32), "apron.jpg")
 
 
 def night(W=1024, H=512):

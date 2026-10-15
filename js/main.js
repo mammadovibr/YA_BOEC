@@ -173,7 +173,13 @@ function onProg(key) {
 const load = (url, key) => new Promise((res, rej) => loader.load(url, res, onProg(key), rej));
 
 let world, player, particles, shock;
-const camState = { yaw: 0, pitch: 0.3, dist: 3.4, target: new THREE.Vector3(), shake: 0, greetYaw: null, auto: 0 };
+const camState = {
+  yaw: 0, pitch: 0.3, dist: 3.4, target: new THREE.Vector3(), shake: 0, greetYaw: null, auto: 0,
+  mode: 'menu',   // menu: portrait shot of the hero | intro: fly-around | game: third person
+  cur: { yaw: Math.PI, pitch: 0.03, dist: 1.3, ty: 1.42, side: 0, lift: 0 },
+  intro: null,
+};
+let introActive = false, introDone = null;
 
 async function init() {
   const [gym, hero] = await Promise.all([load('assets/gym.glb', 'gym'), load('assets/hero.glb', 'hero')]);
@@ -185,6 +191,7 @@ async function init() {
   particles.setScale(innerHeight * renderer.getPixelRatio());
   shock = new Shockwaves(scene);
   camState.target.copy(player.root.position).add(new THREE.Vector3(0, 1.25, 0));
+  Object.assign(camState.cur, menuParams(0));
   updateCamera(0.016, true);
   // warm up shaders so the first punch does not stutter
   renderer.compile(scene, camera);
@@ -201,13 +208,23 @@ async function init() {
 function startMode(mode) {
   sound.unlock();
   sound.ui();
-  if (mode === 'resume') { show(null); paused = false; return; }
-  if (mode === 'menu') { game.mode = 'menu'; show('menu'); $('[data-menu="resume"]').classList.add('hidden'); return; }
-  show(null);
-  paused = false;
-  sound.setMusic('gym');
-  if (mode === 'free') game.startFree(); else game.startRound();
+  if (introActive) return;
+  if (mode === 'menu') { game.mode = 'menu'; camState.mode = 'menu'; show('menu'); $('[data-menu="resume"]').classList.add('hidden'); return; }
   $('[data-menu="resume"]').classList.add('hidden');
+  if (mode === 'resume') {
+    playIntro(false, () => { show(null); paused = false; });
+  } else {
+    sound.setMusic('gym');
+    playIntro(true, () => {
+      show(null);
+      paused = false;
+      if (mode === 'free') game.startFree(); else game.startRound();
+      if (!store.get('camHint', false)) {
+        store.set('camHint', true);
+        setTimeout(() => ui.popupCenter('👆 Свайп справа — повернуть камеру', ''), 600);
+      }
+    });
+  }
   try {
     if (/Android|iPhone|iPad/i.test(navigator.userAgent) && !document.fullscreenElement && document.documentElement.requestFullscreen) {
       document.documentElement.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation?.lock?.('landscape').catch(() => {})).catch(() => {});
@@ -220,6 +237,7 @@ let paused = false;
 $('#btn-menu').addEventListener('click', () => {
   sound.ui();
   paused = game.mode === 'round';
+  camState.mode = 'menu';
   show('menu');
   if (game.mode === 'free' || game.mode === 'round') $('[data-menu="resume"]').classList.remove('hidden');
 });
@@ -261,35 +279,118 @@ document.addEventListener('visibilitychange', () => {
 
 // ------------------------------------------------------------------ camera
 const _t = new THREE.Vector3();
-function updateCamera(dt, snap = false) {
-  const d = input.takeCam();
+const _look = new THREE.Vector3();
+const ease = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const lerpAngle = (a, b, k) => a + (THREE.MathUtils.euclideanModulo(b - a + Math.PI, Math.PI * 2) - Math.PI) * k;
+
+// Menu shot: hero facing the camera, framed from the waist up, pushed aside so the menu fits.
+function menuParams(time) {
+  const portrait = innerHeight > innerWidth;
+  return {
+    yaw: (player ? player.heading : Math.PI) + Math.sin(time * 0.25) * 0.1,
+    pitch: 0.03,
+    dist: portrait ? 2.0 : 1.3,
+    ty: 1.4,
+    side: portrait ? 0 : Math.min(0.55, 0.32 * innerWidth / innerHeight),
+    lift: portrait ? 0.62 : 0,
+  };
+}
+
+function gameParams(dt, d) {
   camState.yaw -= d.x * 0.0065;
   camState.pitch = THREE.MathUtils.clamp(camState.pitch + d.y * 0.004, -0.05, 1.1);
   const portrait = innerHeight > innerWidth;
-  const baseMin = portrait ? 2.6 : 1.8;
-  camState.dist = THREE.MathUtils.clamp(camState.dist + d.z, baseMin, 7);
+  camState.dist = THREE.MathUtils.clamp(camState.dist + d.z, portrait ? 2.6 : 1.8, 7);
   if (Math.abs(d.x) + Math.abs(d.y) > 0) camState.greetYaw = null;
-
   // cinematic helpers
   if (player.state === 'action' && player.current === 'greet' && camState.greetYaw == null) camState.greetYaw = player.heading;
   if (camState.greetYaw != null) {
     if (player.current !== 'greet') camState.greetYaw = null;
-    else camState.yaw += (THREE.MathUtils.euclideanModulo(camState.greetYaw - camState.yaw + Math.PI, Math.PI * 2) - Math.PI) * Math.min(1, dt * 2.5);
+    else camState.yaw = lerpAngle(camState.yaw, camState.greetYaw, Math.min(1, dt * 2.5));
   }
   if (player.state === 'dance') camState.yaw += dt * 0.35;
   const extra = (player.current === 'flip' ? 1.2 : 0) + (player.state === 'dance' ? 0.8 : 0) + (portrait ? 1.2 : 0);
   camState.auto += (extra - camState.auto) * Math.min(1, dt * 2);
+  return { yaw: camState.yaw, pitch: camState.pitch, dist: camState.dist + camState.auto,
+    ty: player.current === 'flip' ? 1.0 : 1.25, side: 0, lift: 0 };
+}
+
+// Play pressed: push in on the hero (he waves), then orbit 180° to behind his back.
+function playIntro(wave, done) {
+  introActive = true;
+  introDone = done;
+  input.enabled = false;
+  $('#menu').classList.add('hidden');
+  $('#results').classList.add('hidden');
+  const start = { ...camState.cur };
+  const portrait = innerHeight > innerWidth;
+  camState.yaw = player.heading + Math.PI;   // directly behind
+  camState.pitch = 0.3;
+  camState.dist = 3.4;
+  camState.auto = portrait ? 1.2 : 0;
+  const push = { ...start, dist: start.dist * 0.72, side: 0, lift: 0, ty: 1.45, pitch: 0.06 };
+  camState.intro = { t: 0, start, push, A: wave ? 1.5 : 0.6, B: 2.6 };
+  camState.mode = 'intro';
+  if (wave) {
+    player.trigger('greet');
+    sound.whoosh(0.25);
+  }
+}
+
+function finishIntro() {
+  camState.mode = 'game';
+  camState.intro = null;
+  introActive = false;
+  if (player.current === 'greet') player.cancelAction();
+  const cb = introDone;
+  introDone = null;
+  if (cb) cb();
+}
+
+function updateCamera(dt, snap = false) {
+  const d = input.takeCam();
+  const c = camState.cur;
+  let p;
+  if (camState.mode === 'game') {
+    p = gameParams(dt, d);
+    Object.assign(c, p);
+  } else if (camState.mode === 'menu') {
+    p = menuParams(performance.now() / 1000);
+    const k = snap ? 1 : Math.min(1, dt * 2.2);
+    c.yaw = lerpAngle(c.yaw, p.yaw, k);
+    for (const key of ['pitch', 'dist', 'ty', 'side', 'lift']) c[key] += (p[key] - c[key]) * k;
+  } else {
+    const it = camState.intro;
+    it.t += dt;
+    if (it.t < it.A) {
+      const k = ease(it.t / it.A);
+      for (const key of ['pitch', 'dist', 'ty', 'side', 'lift']) c[key] = it.start[key] + (it.push[key] - it.start[key]) * k;
+      c.yaw = lerpAngle(it.start.yaw, it.push.yaw, k);
+    } else {
+      const k = ease(Math.min(1, (it.t - it.A) / it.B));
+      const end = { yaw: camState.yaw, pitch: camState.pitch, dist: camState.dist + camState.auto, ty: 1.25, side: 0, lift: 0 };
+      // a full half-turn around the hero, whichever side is shorter is ignored on purpose
+      let dy = THREE.MathUtils.euclideanModulo(end.yaw - it.push.yaw, Math.PI * 2);
+      if (dy < 0.5) dy += Math.PI * 2;
+      c.yaw = it.push.yaw + dy * k;
+      for (const key of ['pitch', 'dist', 'ty', 'side', 'lift']) c[key] = it.push[key] + (end[key] - it.push[key]) * k;
+      if (k >= 1) { camState.yaw = c.yaw; finishIntro(); }
+    }
+  }
 
   _t.copy(player.root.position);
-  _t.y += player.current === 'flip' ? 1.0 : 1.25;
-  if (snap) camState.target.copy(_t); else camState.target.lerp(_t, Math.min(1, dt * 8));
+  _t.y += c.ty;
+  if (snap || camState.mode !== 'game') camState.target.copy(_t); else camState.target.lerp(_t, Math.min(1, dt * 8));
 
-  const dist = camState.dist + camState.auto;
-  const cp = Math.cos(camState.pitch);
+  // pan (not rotate) so the hero sits off-centre in the menu shot
+  const rx = Math.cos(c.yaw), rz = -Math.sin(c.yaw);
+  _look.copy(camState.target);
+  _look.x -= rx * c.side; _look.z -= rz * c.side; _look.y -= c.lift;
+  const cp = Math.cos(c.pitch);
   camera.position.set(
-    camState.target.x + Math.sin(camState.yaw) * cp * dist,
-    camState.target.y + Math.sin(camState.pitch) * dist,
-    camState.target.z + Math.cos(camState.yaw) * cp * dist,
+    _look.x + Math.sin(c.yaw) * cp * c.dist,
+    _look.y + Math.sin(c.pitch) * c.dist,
+    _look.z + Math.cos(c.yaw) * cp * c.dist,
   );
   // keep the camera inside the room
   if (world?.bounds) {
@@ -298,13 +399,22 @@ function updateCamera(dt, snap = false) {
     camera.position.z = THREE.MathUtils.clamp(camera.position.z, b.minZ - 0.1, b.maxZ + 0.1);
   }
   camera.position.y = THREE.MathUtils.clamp(camera.position.y, 0.35, 4.1);
-  camera.lookAt(camState.target);
+  camera.lookAt(_look);
   if (camState.shake > 0.0005) {
     camera.position.x += (Math.random() - 0.5) * camState.shake;
     camera.position.y += (Math.random() - 0.5) * camState.shake;
     camState.shake *= Math.pow(0.001, dt);
   }
 }
+
+// tap during the fly-around skips it
+$('#touch-zone').addEventListener('pointerdown', () => {
+  if (camState.mode === 'intro' && camState.intro && camState.intro.t > 0.4) {
+    camState.yaw = player.heading + Math.PI;
+    camState.cur.yaw = camState.yaw;
+    finishIntro();
+  }
+});
 
 // ------------------------------------------------------------------ events -> sound/fx/score
 const _dir = new THREE.Vector3();
@@ -355,7 +465,7 @@ function handlePlayerEvents(events) {
     } else if (e.type === 'start') {
       if (e.name === 'jump') sound.whoosh(0.5);
       if (e.name === 'flip') { sound.whoosh(1); setTimeout(() => sound.whoosh(0.8), 450); }
-      if (e.name === 'greet') { game.onGreet(); setTimeout(() => sound.applause(1.2, 0.25), 300); }
+      if (e.name === 'greet' && !introActive) { game.onGreet(); setTimeout(() => sound.applause(1.2, 0.25), 300); }
     } else if (e.type === 'end') {
       if (e.name === 'flip') {
         sound.land(0.9);
@@ -386,24 +496,28 @@ function loop(now) {
   requestAnimationFrame(loop);
   let dt = Math.min(0.05, (now - last) / 1000);
   last = now;
-  if (paused) dt = 0;
+  frame(dt);
+}
 
+function frame(dt) {
+  // a paused round freezes the game, but the menu camera keeps breathing
+  const gdt = paused ? 0 : dt;
   const move = input.getMove();
   if (!hintGone && (Math.abs(move.x) + Math.abs(move.y) > 0.2)) { hintGone = true; $('#joy-hint').classList.add('gone'); }
   for (const a of input.takeActions()) {
     player.trigger(a, { bags: world.bags });
     sound.unlock();
   }
-  const pev = player.update(dt, move, camState.yaw, world);
+  const pev = player.update(gdt, move, camState.yaw, world);
   handlePlayerEvents(pev);
-  handleWorldEvents(world.update(dt));
-  game.update(dt, player.state === 'dance');
-  particles.update(dt);
-  shock.update(dt);
+  handleWorldEvents(world.update(gdt));
+  game.update(gdt, player.state === 'dance');
+  particles.update(gdt);
+  shock.update(gdt);
   sound.update();
 
   // leaking sand from a badly beaten bag
-  sandT -= dt;
+  sandT -= gdt;
   for (const b of world.bags) {
     if (b.state === 'hanging' && b.hp < b.maxHp * 0.3 && sandT <= 0) {
       const c = b.center(new THREE.Vector3()); c.y -= b.halfH;
@@ -411,7 +525,7 @@ function loop(now) {
     }
   }
   if (sandT <= 0) sandT = 0.04;
-  hpShowT -= dt;
+  hpShowT -= gdt;
   ui.bagHp(lastBag && hpShowT > 0 && lastBag.state === 'hanging' ? Math.max(0, lastBag.hp / lastBag.maxHp) : null);
 
   updateCamera(dt);
@@ -456,4 +570,4 @@ init().catch((err) => {
 });
 
 // handy for debugging from the console
-window.__game = { get player() { return player; }, get world() { return world; }, game, sound, renderer, scene, camera };
+window.__game = { get player() { return player; }, get world() { return world; }, game, sound, renderer, scene, camera, input, frame, camState };

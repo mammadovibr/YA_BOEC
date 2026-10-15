@@ -35,7 +35,37 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: no
   overflow-y: auto; touch-action: pan-y;
 }
 #loading { background: radial-gradient(ellipse at 50% 40%, #2a0d12 0%, var(--bg) 70%); }
-#menu, #results { background: linear-gradient(180deg, rgba(8, 8, 12, 0.35), rgba(8, 8, 12, 0.75)); }
+#results { justify-content: flex-start; background: linear-gradient(180deg, rgba(8, 8, 12, 0.35), rgba(8, 8, 12, 0.75)); }
+/* menu sits beside the hero: left column in landscape, bottom sheet in portrait */
+#menu {
+  align-items: flex-start; justify-content: flex-start;
+  background: linear-gradient(90deg, rgba(8, 8, 12, 0.88) 0%, rgba(8, 8, 12, 0.55) 42%, rgba(8, 8, 12, 0) 62%);
+}
+#menu .menu-card { margin: auto 0; width: min(440px, 50vw); background: rgba(16, 16, 22, 0.6); }
+@media (orientation: portrait) {
+  #menu {
+    align-items: stretch; justify-content: flex-end;
+    background: linear-gradient(0deg, rgba(8, 8, 12, 0.92) 0%, rgba(8, 8, 12, 0.5) 50%, rgba(8, 8, 12, 0) 68%);
+  }
+  #menu .menu-card { width: 100%; margin: auto 0 0; padding: 14px; }
+  #menu .tagline, #menu .help { display: none; }
+  #menu .menu-card .logo { font-size: 40px; }
+  #menu .big { padding: 11px 14px; font-size: 18px; }
+  #menu .achievements { grid-template-columns: repeat(11, 1fr); gap: 3px; }
+  #menu .ach { font-size: 14px; border-radius: 8px; }
+}
+@media (max-height: 520px) {
+  .menu-card { padding: 12px 14px; }
+  #menu .tagline { display: none; }
+  .chip { font-size: 12px; padding: 6px 9px; }
+  .settings { gap: 5px; margin: 6px 0; }
+  .menu-card .logo { font-size: 38px; }
+  .tagline { margin: 4px 0 10px; font-size: 13px; }
+  .big { font-size: 17px; padding: 10px 14px; }
+  .best { margin: 8px 0 4px; }
+  .achievements { grid-template-columns: repeat(11, 1fr); gap: 4px; }
+  .ach { font-size: 15px; border-radius: 8px; }
+}
 .logo {
   font-size: clamp(44px, 11vw, 92px); letter-spacing: 0.04em; line-height: 1; text-align: center;
   color: #fff; text-shadow: 0 0 6px #ff2a3a, 0 0 22px #ff2a3a, 0 0 48px rgba(255, 42, 58, 0.6);
@@ -200,6 +230,9 @@ button { font-family: inherit; color: inherit; cursor: pointer; touch-action: no
   #attacks { transform: scale(0.86); transform-origin: right bottom; }
   #specials { top: auto; bottom: calc(230px + var(--edge) + var(--safe-b)); flex-direction: column; }
   .score b { font-size: 28px; }
+  /* coach + timer go under the icon row on narrow screens */
+  .hud-center { top: calc(60px + var(--safe-t)); width: 92vw; }
+  #rotate-hint { top: calc(110px + var(--safe-t)); }
 }
 @media (max-height: 420px) {
   #attacks { transform: scale(0.82); transform-origin: right bottom; }
