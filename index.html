@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Я БОЕЦ</title>
+  <meta name="description" content="3D-игра: боксёрский зал, груши, комбо, сальто и дискотека. Прямо в браузере.">
+  <meta name="theme-color" content="#0b0b10">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Я БОЕЦ">
+  <meta property="og:title" content="Я БОЕЦ — бокс в браузере">
+  <meta property="og:description" content="Бей грушу, собирай комбо, рви грушу в клочья, танцуй под диско-шаром.">
+  <meta property="og:image" content="icons/og.jpg">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Russo+One&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="modulepreload" href="vendor/three/three.module.min.js">
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/addons/" } }
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="touch-zone"></div>
+
+  <!-- loading -->
+  <section id="loading" class="screen">
+    <div class="logo"><span>Я</span> БОЕЦ</div>
+    <div class="bar"><i id="load-bar"></i></div>
+    <p id="load-text">Загрузка зала… 0%</p>
+  </section>
+
+  <!-- main menu -->
+  <section id="menu" class="screen hidden">
+    <div class="menu-card">
+      <div class="logo"><span>Я</span> БОЕЦ</div>
+      <p class="tagline">Бей грушу. Собирай комбо. Порви её.</p>
+      <div class="menu-buttons">
+        <button class="big" data-menu="free">🥊 Тренировка</button>
+        <button class="big red" data-menu="round">⏱ Раунд 60 сек</button>
+        <button class="big ghost hidden" data-menu="resume">▶ Продолжить</button>
+      </div>
+      <p class="best">Рекорд: <b id="best">0</b></p>
+      <div class="settings">
+        <button class="chip" id="set-sound">🔊 Звук</button>
+        <button class="chip" id="set-music">🎵 Музыка</button>
+        <button class="chip" id="set-voice">🗣 Тренер</button>
+        <button class="chip" id="set-quality">✨ Графика: авто</button>
+      </div>
+      <details class="help">
+        <summary>Как играть</summary>
+        <ul>
+          <li><b>Левая половина экрана</b> — джойстик (сильнее наклон — бег).</li>
+          <li><b>Свайп справа</b> — повернуть камеру, щипок — приблизить.</li>
+          <li>Кнопки ударов сами подводят бойца к груше.</li>
+          <li><b>Контратака</b>: бей, когда груша летит на тебя — очки ×2.</li>
+          <li>Серии ударов повышают множитель до ×3.</li>
+          <li>Порви грушу, станцуй под диско-шаром, сделай сальто!</li>
+          <li>Клавиатура: WASD, Shift — бег, J K L — удары, U — нога, пробел — прыжок, G — привет, H — танец, F — сальто.</li>
+        </ul>
+      </details>
+      <div class="achievements" id="ach-list"></div>
+    </div>
+  </section>
+
+  <!-- results -->
+  <section id="results" class="screen hidden">
+    <div class="menu-card">
+      <h2 id="res-title">Раунд окончен</h2>
+      <div class="rank" id="res-rank">Боец</div>
+      <div class="res-grid">
+        <div><small>Очки</small><b id="res-score">0</b></div>
+        <div><small>Удары</small><b id="res-hits">0</b></div>
+        <div><small>Макс. комбо</small><b id="res-combo">0</b></div>
+        <div><small>Рекорд</small><b id="res-best">0</b></div>
+      </div>
+      <div class="menu-buttons">
+        <button class="big red" data-menu="round">🔁 Ещё раунд</button>
+        <button class="big ghost" data-menu="menu">☰ Меню</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div class="hud-left">
+      <div class="score"><b id="score">0</b><small>очков</small></div>
+      <div class="combo" id="combo"><b id="combo-n">0</b> комбо <span id="combo-m">×1</span></div>
+    </div>
+    <div class="hud-center">
+      <div class="timer hidden" id="timer">60</div>
+      <div class="bag-hp hidden" id="bag-hp"><i></i></div>
+      <div class="coach" id="coach"></div>
+    </div>
+    <div class="hud-right">
+      <button class="icon" id="btn-menu" aria-label="Меню">☰</button>
+      <button class="icon" id="btn-sound" aria-label="Звук">🔊</button>
+      <button class="icon" id="btn-full" aria-label="Во весь экран">⛶</button>
+    </div>
+
+    <div id="joy"><div id="joy-knob"></div></div>
+    <div class="joy-hint" id="joy-hint">Двигайся<br>здесь</div>
+
+    <div id="specials">
+      <button data-act="greet"><span>👋</span>Привет</button>
+      <button data-act="dance"><span>🪩</span>Танец</button>
+      <button data-act="flip"><span>🤸</span>Сальто</button>
+    </div>
+    <div id="attacks">
+      <button class="atk a1" data-act="box_01"><span>👊</span><em id="lbl-box_01">Двойка</em></button>
+      <button class="atk a2" data-act="box_02"><span>💥</span><em id="lbl-box_02">Серия</em></button>
+      <button class="atk a3" data-act="box_03"><span>⚡</span><em id="lbl-box_03">Комбо</em></button>
+      <button class="atk a4" data-act="kick"><span>🦵</span><em>Нога</em></button>
+      <button class="atk a5" data-act="jump"><span>⤒</span><em>Прыжок</em></button>
+    </div>
+  </div>
+
+  <div id="popups"></div>
+  <div id="big-text"></div>
+  <div id="toasts"></div>
+  <div id="rotate-hint" class="hidden">Поверни телефон горизонтально — так удобнее 📱↻</div>
+
+  <noscript>Для игры нужен JavaScript.</noscript>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
